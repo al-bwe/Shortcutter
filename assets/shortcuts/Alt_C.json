@@ -4,7 +4,7 @@
     "steps": [
         {
             "action": "left_click",
-            "target": "icon.png"
+            "target": "Connection_tool.png"
         }
     ]
 }
