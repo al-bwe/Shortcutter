@@ -1,0 +1,6 @@
+main.exe
+main.spec
+__pycache__/constants.cpython-312.pyc
+__pycache__/functions.cpython-312.pyc
+__pycache__/gui.cpython-312.pyc
+__pycache__/logic.cpython-312.pyc
