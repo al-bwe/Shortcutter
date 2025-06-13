@@ -34,16 +34,24 @@ def is_shortcut_valid(combo: str, existing_shortcuts: List[str]) -> bool:
     - Is not already used
     - Matches simple pattern of keys/modifiers
     """
+    print(f"Validating shortcut: {combo}")  # Debugging line
+    print(f"Existing shortcuts: {existing_shortcuts}")  # Debugging line
+
     if not combo:
         return False
     normalized = normalize_shortcut(combo)
     if normalized in COMMON_SHORTCUTS:
+        print(f"Shortcut rejected as common: {normalized}")  # Debugging line
         return False
     if normalized in (normalize_shortcut(s) for s in existing_shortcuts):
+        print(f"Shortcut rejected as already used: {normalized}")  # Debugging line
         return False
     # Simple pattern: modifiers + single key (letters, digits, f1-f12)
-    pattern = re.compile(r"^(alt\+|ctrl\+|shift\+|win\+)*[a-z0-9f1-9]{1,3}$")
-    return bool(pattern.match(normalized))
+    pattern = re.compile(r"^(alt\+|ctrl\+|shift\+|win\+)*[a-z0-9f1-12]{1,3}$")
+    if not pattern.match(normalized):
+        print(f"Shortcut rejected by pattern: {normalized}")  # Debugging line
+        return False
+    return True
 
 def load_all_shortcuts() -> List[Dict]:
     """
@@ -63,9 +71,6 @@ def load_all_shortcuts() -> List[Dict]:
     return shortcuts
 
 def save_shortcut(shortcut: Dict) -> None:
-    """
-    Save a shortcut dict to JSON file using its 'name' as filename
-    """
     ensure_directories()
     if "name" not in shortcut:
         raise ValueError("Shortcut dict must have a 'name' key")

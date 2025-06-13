@@ -1,0 +1,10 @@
+{
+    "name": "r",
+    "combo": "Alt+R",
+    "steps": [
+        {
+            "action": "left_click",
+            "target": "clipboard_snippet_fe21627d9c7044689f3fdd745e6a3ff7.png"
+        }
+    ]
+}

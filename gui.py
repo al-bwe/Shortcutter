@@ -2,13 +2,16 @@ print("Loading gui.py...")
 
 import sys
 import os
+import uuid
+import tempfile
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton, QListWidget, QListWidgetItem,
     QInputDialog, QFileDialog, QMessageBox, QComboBox, QDialog, QLabel, QLineEdit,
     QHBoxLayout, QTextEdit, QKeySequenceEdit
 )
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QKeySequence
+from PyQt6.QtGui import QKeySequence, QIcon
+from PIL import ImageGrab
 
 import logic
 import functions
@@ -30,12 +33,17 @@ class CreateShortcutDialog(QDialog):
     def init_ui(self):
         layout = QVBoxLayout()
 
-        # Step 1: Shortcut combo input using QKeySequenceEdit
+        # Step 1: Shortcut name input
+        layout.addWidget(QLabel("Enter shortcut name:"))
+        self.name_input = QLineEdit()
+        layout.addWidget(self.name_input)
+
+        # Step 2: Shortcut combo input using QKeySequenceEdit
         layout.addWidget(QLabel("Enter shortcut key combination (e.g. Alt+C):"))
         self.combo_input = QKeySequenceEdit()
         layout.addWidget(self.combo_input)
 
-        # Step 2: PNG file selector
+        # Step 3: PNG file selector
         self.png_path = None
         btn_browse = QPushButton("Select PNG Image")
         btn_browse.clicked.connect(self.browse_png)
@@ -44,7 +52,12 @@ class CreateShortcutDialog(QDialog):
         self.png_label = QLabel("No file selected")
         layout.addWidget(self.png_label)
 
-        # Step 3: Click type
+        # Step 4: Create PNG from Clipboard
+        btn_clipboard = QPushButton("Create PNG from Clipboard")
+        btn_clipboard.clicked.connect(self.create_png_from_clipboard)
+        layout.addWidget(btn_clipboard)
+
+        # Step 5: Click type
         layout.addWidget(QLabel("Select mouse click action:"))
         self.click_combo = QComboBox()
         self.click_combo.addItems(["left_click", "right_click"])
@@ -66,8 +79,35 @@ class CreateShortcutDialog(QDialog):
             else:
                 QMessageBox.warning(self, "Invalid file", "Selected file is not a valid PNG image.")
 
+    def create_png_from_clipboard(self):
+        try:
+            # Grab the image from the clipboard
+            image = ImageGrab.grabclipboard()
+            if image is None:
+                QMessageBox.warning(self, "No Image", "No image found in clipboard.")
+                return
+
+            # Generate a unique filename for the clipboard snippet
+            filename = f"clipboard_snippet_{uuid.uuid4().hex}.png"
+            self.png_path = os.path.join(ASSETS_DIR, filename)
+
+            # Ensure the assets directory exists
+            os.makedirs(ASSETS_DIR, exist_ok=True)
+
+            # Save the image to the assets directory
+            image.save(self.png_path, "PNG")
+
+            # Update the label to show the saved path
+            self.png_label.setText(f"Saved: {self.png_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save image: {e}")
+
     def on_create(self):
+        name = self.name_input.text().strip()
         combo = self.combo_input.keySequence().toString()  # Default format is NativeText
+        if not name:
+            QMessageBox.warning(self, "No Name", "Please enter a name for the shortcut.")
+            return
         if not logic.is_shortcut_valid(combo, [s["combo"] for s in self.existing_shortcuts]):
             QMessageBox.warning(self, "Invalid Shortcut", "Shortcut combo invalid, common, or already used.")
             return
@@ -75,16 +115,19 @@ class CreateShortcutDialog(QDialog):
             QMessageBox.warning(self, "No Image", "Please select a PNG image file.")
             return
 
-        # Copy image to assets folder
-        try:
-            filename = os.path.basename(self.png_path)
-            dest_path = functions.copy_image_to_assets(self.png_path, ASSETS_DIR, filename)
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to copy image: {e}")
-            return
+        # Check if the image is already in the ASSETS_DIR
+        filename = os.path.basename(self.png_path)
+        if not self.png_path.startswith(ASSETS_DIR):
+            try:
+                dest_path = functions.copy_image_to_assets(self.png_path, ASSETS_DIR, filename)
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to copy image: {e}")
+                return
+        else:
+            dest_path = self.png_path  # Image is already in the ASSETS_DIR
 
+        self.shortcut["name"] = name
         self.shortcut["combo"] = combo
-        self.shortcut["name"] = functions.sanitize_filename(combo.replace("+", "_"))
         self.shortcut["steps"].append({
             "action": self.click_combo.currentText(),
             "target": filename
@@ -120,7 +163,11 @@ class MainWindow(QWidget):
     def refresh_list(self):
         self.list_widget.clear()
         for sc in self.shortcuts:
-            item = QListWidgetItem(f"{sc['combo']}:\n{functions.format_steps_for_display(sc.get('steps', []))}")
+            item = QListWidgetItem()
+            item.setText(f"{sc['name']} ({sc['combo']})")
+            icon_path = os.path.join(ASSETS_DIR, sc["steps"][0]["target"])
+            if os.path.exists(icon_path):
+                item.setIcon(QIcon(icon_path))
             self.list_widget.addItem(item)
 
     def create_new_shortcut(self):
@@ -138,11 +185,17 @@ class MainWindow(QWidget):
             return
 
         selected_item = selected_items[0]
-        shortcut_text = selected_item.text().split(":\n")[0]  # Extract combo
-        shortcut = next((sc for sc in self.shortcuts if sc["combo"] == shortcut_text), None)
+        # Extract the shortcut name and combo from the displayed text
+        shortcut_text = selected_item.text()
+        name, combo = shortcut_text.split(" (")
+        combo = combo.rstrip(")")
+
+        # Find the shortcut by name and combo
+        shortcut = next((sc for sc in self.shortcuts if sc["name"] == name and sc["combo"] == combo), None)
 
         if shortcut:
             dialog = CreateShortcutDialog(self.shortcuts, self)
+            dialog.name_input.setText(shortcut["name"])
             dialog.combo_input.setKeySequence(QKeySequence(shortcut["combo"]))
             dialog.png_path = os.path.join(ASSETS_DIR, shortcut["steps"][0]["target"])
             dialog.png_label.setText(dialog.png_path)
