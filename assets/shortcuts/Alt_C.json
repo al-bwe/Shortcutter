@@ -1,0 +1,10 @@
+{
+    "name": "Alt_C",
+    "combo": "Alt+C",
+    "steps": [
+        {
+            "action": "left_click",
+            "target": "icon.png"
+        }
+    ]
+}

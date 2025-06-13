@@ -18,7 +18,7 @@ from constants import ASSETS_DIR
 class CreateShortcutDialog(QDialog):
     def __init__(self, existing_shortcuts, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Create New Shortcut")
+        self.setWindowTitle("Create/Edit Shortcut")
         self.existing_shortcuts = existing_shortcuts
         self.shortcut = {
             "name": "",
@@ -51,7 +51,7 @@ class CreateShortcutDialog(QDialog):
         layout.addWidget(self.click_combo)
 
         # Buttons
-        btn_ok = QPushButton("Create Shortcut")
+        btn_ok = QPushButton("Save Shortcut")
         btn_ok.clicked.connect(self.on_create)
         layout.addWidget(btn_ok)
 
@@ -67,7 +67,7 @@ class CreateShortcutDialog(QDialog):
                 QMessageBox.warning(self, "Invalid file", "Selected file is not a valid PNG image.")
 
     def on_create(self):
-        combo = self.combo_input.keySequence().toString(QKeySequence.NativeText)
+        combo = self.combo_input.keySequence().toString()  # Default format is NativeText
         if not logic.is_shortcut_valid(combo, [s["combo"] for s in self.existing_shortcuts]):
             QMessageBox.warning(self, "Invalid Shortcut", "Shortcut combo invalid, common, or already used.")
             return
@@ -110,6 +110,10 @@ class MainWindow(QWidget):
         self.btn_create.clicked.connect(self.create_new_shortcut)
         layout.addWidget(self.btn_create)
 
+        self.btn_edit = QPushButton("Edit Selected Shortcut")
+        self.btn_edit.clicked.connect(self.edit_selected_shortcut)
+        layout.addWidget(self.btn_edit)
+
         self.setLayout(layout)
         self.refresh_list()
 
@@ -126,6 +130,31 @@ class MainWindow(QWidget):
             logic.save_shortcut(shortcut)
             self.shortcuts.append(shortcut)
             self.refresh_list()
+
+    def edit_selected_shortcut(self):
+        selected_items = self.list_widget.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "No Selection", "Please select a shortcut to edit.")
+            return
+
+        selected_item = selected_items[0]
+        shortcut_text = selected_item.text().split(":\n")[0]  # Extract combo
+        shortcut = next((sc for sc in self.shortcuts if sc["combo"] == shortcut_text), None)
+
+        if shortcut:
+            dialog = CreateShortcutDialog(self.shortcuts, self)
+            dialog.combo_input.setKeySequence(QKeySequence(shortcut["combo"]))
+            dialog.png_path = os.path.join(ASSETS_DIR, shortcut["steps"][0]["target"])
+            dialog.png_label.setText(dialog.png_path)
+            dialog.click_combo.setCurrentText(shortcut["steps"][0]["action"])
+
+            if dialog.exec():
+                updated_shortcut = dialog.shortcut
+                logic.save_shortcut(updated_shortcut)
+                self.shortcuts = logic.load_all_shortcuts()  # Reload shortcuts
+                self.refresh_list()
+        else:
+            QMessageBox.warning(self, "Error", "Could not find the selected shortcut.")
 
 
 def launch_gui():

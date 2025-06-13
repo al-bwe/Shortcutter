@@ -11,6 +11,11 @@ def start_gui(icon, item):
     main_py = os.path.join(script_dir, "main.py")
     subprocess.Popen([sys.executable, main_py, "--gui"])
 
+def start_runner(icon, item):
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    runner_py = os.path.join(script_dir, "runner.py")
+    subprocess.Popen([sys.executable, runner_py])
+
 def quit_app(icon, item):
     icon.stop()
     sys.exit()
@@ -22,6 +27,7 @@ def setup_tray():
 
     menu = Menu(
         Item('Open Shortcut Creator', start_gui),
+        Item('Start Runner', start_runner),
         Item('Exit', quit_app)
     )
 
