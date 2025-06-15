@@ -1,0 +1,16 @@
+{
+    "name": "asd",
+    "combo": "Alt+W",
+    "steps": [
+        {
+            "action": "move_to_image",
+            "target": "Screenshot 2025-06-14 011503.png"
+        },
+        {
+            "action": "left_click"
+        },
+        {
+            "action": "move_to_origin"
+        }
+    ]
+}

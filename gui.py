@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout, QTextEdit, QKeySequenceEdit
 )
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QKeySequence, QIcon
+from PyQt6.QtGui import QKeySequence, QIcon, QPixmap
 from PIL import ImageGrab
 
 import logic
@@ -33,106 +33,234 @@ class CreateShortcutDialog(QDialog):
     def init_ui(self):
         layout = QVBoxLayout()
 
-        # Step 1: Shortcut name input
+        # Shortcut name input
         layout.addWidget(QLabel("Enter shortcut name:"))
         self.name_input = QLineEdit()
         layout.addWidget(self.name_input)
 
-        # Step 2: Shortcut combo input using QKeySequenceEdit
-        layout.addWidget(QLabel("Enter shortcut key combination (e.g. Alt+C):"))
+        # Key combo input
+        layout.addWidget(QLabel("Enter key combo trigger:"))
         self.combo_input = QKeySequenceEdit()
         layout.addWidget(self.combo_input)
 
-        # Step 3: PNG file selector
-        self.png_path = None
-        btn_browse = QPushButton("Select PNG Image")
-        btn_browse.clicked.connect(self.browse_png)
-        layout.addWidget(btn_browse)
+        # Steps list
+        layout.addWidget(QLabel("Steps:"))
+        self.steps_list = QListWidget()
+        self.steps_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        layout.addWidget(self.steps_list)
 
-        self.png_label = QLabel("No file selected")
-        layout.addWidget(self.png_label)
+        # Add step options
+        step_layout = QHBoxLayout()
 
-        # Step 4: Create PNG from Clipboard
-        btn_clipboard = QPushButton("Create PNG from Clipboard")
-        btn_clipboard.clicked.connect(self.create_png_from_clipboard)
-        layout.addWidget(btn_clipboard)
+        # Add delay step
+        self.delay_input = QLineEdit()
+        self.delay_input.setPlaceholderText("Delay (seconds)")
+        step_layout.addWidget(self.delay_input)
+        btn_add_delay = QPushButton("Add Delay")
+        btn_add_delay.clicked.connect(self.add_delay_step)
+        step_layout.addWidget(btn_add_delay)
 
-        # Step 5: Click type
-        layout.addWidget(QLabel("Select mouse click action:"))
-        self.click_combo = QComboBox()
-        self.click_combo.addItems(["left_click", "right_click"])
-        layout.addWidget(self.click_combo)
+        # Add move to image step
+        btn_add_image = QPushButton("Move to Image")
+        btn_add_image.clicked.connect(self.add_image_step)
+        step_layout.addWidget(btn_add_image)
 
-        # Buttons
+        # Add move to origin step
+        btn_add_origin = QPushButton("Move to Origin")
+        btn_add_origin.clicked.connect(self.add_origin_step)
+        step_layout.addWidget(btn_add_origin)
+
+        # Add check duplicates step
+        btn_add_duplicates = QPushButton("Check Duplicates")
+        btn_add_duplicates.clicked.connect(self.add_duplicates_step)
+        step_layout.addWidget(btn_add_duplicates)
+
+        # Add left click step
+        btn_add_left_click = QPushButton("Left Click")
+        btn_add_left_click.clicked.connect(self.add_left_click_step)
+        step_layout.addWidget(btn_add_left_click)
+
+        # Add right click step
+        btn_add_right_click = QPushButton("Right Click")
+        btn_add_right_click.clicked.connect(self.add_right_click_step)
+        step_layout.addWidget(btn_add_right_click)
+
+        layout.addLayout(step_layout)
+
+        # Reorder and delete steps
+        reorder_layout = QHBoxLayout()
+
+        btn_move_up = QPushButton("Move Up")
+        btn_move_up.clicked.connect(self.move_step_up)
+        reorder_layout.addWidget(btn_move_up)
+
+        btn_move_down = QPushButton("Move Down")
+        btn_move_down.clicked.connect(self.move_step_down)
+        reorder_layout.addWidget(btn_move_down)
+
+        btn_delete_step = QPushButton("Delete Step")
+        btn_delete_step.clicked.connect(self.delete_step)
+        reorder_layout.addWidget(btn_delete_step)
+
+        layout.addLayout(reorder_layout)
+
+        # Save button
         btn_ok = QPushButton("Save Shortcut")
         btn_ok.clicked.connect(self.on_create)
         layout.addWidget(btn_ok)
 
         self.setLayout(layout)
 
-    def browse_png(self):
-        fname, _ = QFileDialog.getOpenFileName(self, "Select PNG file", "", "PNG Files (*.png)")
-        if fname:
-            if functions.validate_image_file(fname):
-                self.png_path = fname
-                self.png_label.setText(fname)
+    def add_delay_step(self):
+        delay = self.delay_input.text()
+        if delay.isdigit():
+            self.steps_list.addItem(f"Delay: {delay}s")
+            self.shortcut["steps"].append({"action": "delay", "duration": int(delay)})
+            self.delay_input.clear()
+        else:
+            QMessageBox.warning(self, "Invalid Input", "Delay must be a number.")
+
+    def add_image_step(self):
+        """
+        Add a step to move the cursor to an image.
+        Allows users to select an image via file explorer, snippet tool, or clipboard.
+        Moves the selected image into the icon assets directory.
+        """
+        options = QMessageBox()
+        options.setWindowTitle("Select Image Source")
+        options.setText("Choose how to provide the image:")
+        options.setStandardButtons(QMessageBox.StandardButton.Open | QMessageBox.StandardButton.Cancel)
+        options.addButton("Use Snippet Tool", QMessageBox.ButtonRole.ActionRole)
+        options.addButton("Use Clipboard", QMessageBox.ButtonRole.ActionRole)
+
+        choice = options.exec()
+
+        if choice == QMessageBox.StandardButton.Open:
+            # File explorer option
+            fname, _ = QFileDialog.getOpenFileName(self, "Select PNG file", "", "PNG Files (*.png)")
+            if fname:
+                filename = os.path.basename(fname)
+                dest_path = functions.copy_image_to_assets(fname, ASSETS_DIR, filename)
+                self.display_step_with_image(f"Move cursor to image: {filename}", dest_path)
+                self.shortcut["steps"].append({"action": "move_to_image", "target": filename})
+
+        elif choice == 0:  # Snippet Tool
+            snippet = ImageGrab.grab()  # Capture a screenshot using the snippet tool
+            filename = f"snippet_{int(time.time())}.png"
+            dest_path = os.path.join(ASSETS_DIR, filename)
+            snippet.save(dest_path)
+            self.display_step_with_image(f"Move cursor to image: {filename}", dest_path)
+            self.shortcut["steps"].append({"action": "move_to_image", "target": filename})
+
+        elif choice == 1:  # Clipboard
+            clipboard_image = QApplication.clipboard().pixmap()
+            if clipboard_image.isNull():
+                QMessageBox.warning(self, "Clipboard Error", "No image found in clipboard.")
             else:
-                QMessageBox.warning(self, "Invalid file", "Selected file is not a valid PNG image.")
+                filename = f"clipboard_{int(time.time())}.png"
+                dest_path = os.path.join(ASSETS_DIR, filename)
+                clipboard_image.save(dest_path, "PNG")  # Save clipboard image as PNG
+                self.display_step_with_image(f"Move cursor to image: {filename}", dest_path)
+                self.shortcut["steps"].append({"action": "move_to_image", "target": filename})
 
-    def create_png_from_clipboard(self):
-        try:
-            # Grab the image from the clipboard
-            image = ImageGrab.grabclipboard()
-            if image is None:
-                QMessageBox.warning(self, "No Image", "No image found in clipboard.")
-                return
+    def display_step_with_image(self, description: str, image_path: str):
+        """
+        Display the step description along with the image in the step list.
+        """
+        step_item = QListWidgetItem(description)
+        pixmap = QPixmap(image_path)
+        icon = QIcon(pixmap.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio))
+        step_item.setIcon(icon)
+        self.steps_list.addItem(step_item)
 
-            # Generate a unique filename for the clipboard snippet
-            filename = f"clipboard_snippet_{uuid.uuid4().hex}.png"
-            self.png_path = os.path.join(ASSETS_DIR, filename)
+    def add_origin_step(self):
+        self.steps_list.addItem("Move to Origin")
+        self.shortcut["steps"].append({"action": "move_to_origin"})
 
-            # Ensure the assets directory exists
-            os.makedirs(ASSETS_DIR, exist_ok=True)
+    def add_duplicates_step(self):
+        """
+        Add a step to check for duplicate icons.
+        Allows users to select an image via file explorer, snippet tool, or clipboard.
+        """
+        options = QMessageBox()
+        options.setWindowTitle("Select Image Source")
+        options.setText("Choose how to provide the image:")
+        options.setStandardButtons(QMessageBox.StandardButton.Open | QMessageBox.StandardButton.Cancel)
+        options.addButton("Use Snippet Tool", QMessageBox.ButtonRole.ActionRole)
+        options.addButton("Use Clipboard", QMessageBox.ButtonRole.ActionRole)
 
-            # Save the image to the assets directory
-            image.save(self.png_path, "PNG")
+        choice = options.exec()
 
-            # Update the label to show the saved path
-            self.png_label.setText(f"Saved: {self.png_path}")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to save image: {e}")
+        if choice == QMessageBox.StandardButton.Open:
+            # File explorer option
+            fname, _ = QFileDialog.getOpenFileName(self, "Select PNG file", "", "PNG Files (*.png)")
+            if fname:
+                filename = os.path.basename(fname)
+                dest_path = functions.copy_image_to_assets(fname, ASSETS_DIR, filename)
+                self.steps_list.addItem(f"Check Duplicates: {filename}")
+                self.shortcut["steps"].append({"action": "check_duplicates", "target": filename})
+
+        elif choice == 0:  # Snippet Tool
+            snippet = ImageGrab.grab()  # Capture a screenshot using the snippet tool
+            filename = f"snippet_{int(time.time())}.png"
+            dest_path = os.path.join(ASSETS_DIR, filename)
+            snippet.save(dest_path)
+            self.steps_list.addItem(f"Check Duplicates: {filename}")
+            self.shortcut["steps"].append({"action": "check_duplicates", "target": filename})
+
+        elif choice == 1:  # Clipboard
+            clipboard_image = QApplication.clipboard().image()
+            if clipboard_image.isNull():
+                QMessageBox.warning(self, "Clipboard Error", "No image found in clipboard.")
+            else:
+                filename = f"clipboard_{int(time.time())}.png"
+                dest_path = os.path.join(ASSETS_DIR, filename)
+                clipboard_image.save(dest_path)
+                self.steps_list.addItem(f"Check Duplicates: {filename}")
+                self.shortcut["steps"].append({"action": "check_duplicates", "target": filename})
+
+    def add_left_click_step(self):
+        self.steps_list.addItem("Left Click")
+        self.shortcut["steps"].append({"action": "left_click"})
+
+    def add_right_click_step(self):
+        self.steps_list.addItem("Right Click")
+        self.shortcut["steps"].append({"action": "right_click"})
+
+    def move_step_up(self):
+        current_row = self.steps_list.currentRow()
+        if current_row > 0:
+            current_item = self.steps_list.takeItem(current_row)
+            self.steps_list.insertItem(current_row - 1, current_item)
+            self.steps_list.setCurrentRow(current_row - 1)
+            self.shortcut["steps"].insert(current_row - 1, self.shortcut["steps"].pop(current_row))
+
+    def move_step_down(self):
+        current_row = self.steps_list.currentRow()
+        if current_row < self.steps_list.count() - 1:
+            current_item = self.steps_list.takeItem(current_row)
+            self.steps_list.insertItem(current_row + 1, current_item)
+            self.steps_list.setCurrentRow(current_row + 1)
+            self.shortcut["steps"].insert(current_row + 1, self.shortcut["steps"].pop(current_row))
+
+    def delete_step(self):
+        current_row = self.steps_list.currentRow()
+        if current_row >= 0:
+            self.steps_list.takeItem(current_row)
+            del self.shortcut["steps"][current_row]
 
     def on_create(self):
         name = self.name_input.text().strip()
-        combo = self.combo_input.keySequence().toString()  # Default format is NativeText
-        if not name:
-            QMessageBox.warning(self, "No Name", "Please enter a name for the shortcut.")
+        combo = self.combo_input.keySequence().toString()
+        if not name or not combo:
+            QMessageBox.warning(self, "Missing Input", "Please enter a name and key combo for the shortcut.")
             return
-        if not logic.is_shortcut_valid(combo, [s["combo"] for s in self.existing_shortcuts]):
-            QMessageBox.warning(self, "Invalid Shortcut", "Shortcut combo invalid, common, or already used.")
+        if not self.shortcut["steps"]:
+            QMessageBox.warning(self, "No Steps", "Please add at least one step to the shortcut.")
             return
-        if not self.png_path:
-            QMessageBox.warning(self, "No Image", "Please select a PNG image file.")
-            return
-
-        # Check if the image is already in the ASSETS_DIR
-        filename = os.path.basename(self.png_path)
-        if not self.png_path.startswith(ASSETS_DIR):
-            try:
-                dest_path = functions.copy_image_to_assets(self.png_path, ASSETS_DIR, filename)
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to copy image: {e}")
-                return
-        else:
-            dest_path = self.png_path  # Image is already in the ASSETS_DIR
 
         self.shortcut["name"] = name
         self.shortcut["combo"] = combo
-        self.shortcut["steps"].append({
-            "action": self.click_combo.currentText(),
-            "target": filename
-        })
-
         self.accept()
 
 
@@ -197,14 +325,18 @@ class MainWindow(QWidget):
             dialog = CreateShortcutDialog(self.shortcuts, self)
             dialog.name_input.setText(shortcut["name"])
             dialog.combo_input.setKeySequence(QKeySequence(shortcut["combo"]))
-            dialog.png_path = os.path.join(ASSETS_DIR, shortcut["steps"][0]["target"])
-            dialog.png_label.setText(dialog.png_path)
-            dialog.click_combo.setCurrentText(shortcut["steps"][0]["action"])
+            for step in shortcut["steps"]:
+                if step["action"] == "shortcut":
+                    dialog.steps_list.addItem(f"Shortcut: {step['combo']}")
+                elif step["action"] == "wait":
+                    dialog.steps_list.addItem(f"Wait: {step['duration']}s")
+                elif step["action"] == "wait_for_symbol":
+                    dialog.steps_list.addItem(f"Wait for Symbol: {step['target']}")
 
             if dialog.exec():
                 updated_shortcut = dialog.shortcut
                 logic.save_shortcut(updated_shortcut)
-                self.shortcuts = logic.load_all_shortcuts()  # Reload shortcuts
+                self.shortcuts = logic.load_all_shortcuts()
                 self.refresh_list()
         else:
             QMessageBox.warning(self, "Error", "Could not find the selected shortcut.")

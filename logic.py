@@ -2,7 +2,9 @@
 import json
 import os
 import re
+import time
 from typing import List, Dict
+import pyautogui
 from assets import get_shortcut_path, ensure_directories
 from constants import SHORTCUTS_DIR
 
@@ -74,16 +76,84 @@ def save_shortcut(shortcut: Dict) -> None:
     ensure_directories()
     if "name" not in shortcut:
         raise ValueError("Shortcut dict must have a 'name' key")
+    if "steps" in shortcut:
+        if not isinstance(shortcut["steps"], list):
+            raise ValueError("'steps' must be a list of shortcut strings")
     path = get_shortcut_path(shortcut["name"])
     with open(path, "w") as f:
         json.dump(shortcut, f, indent=4)
 
 def execute_shortcut(shortcut: Dict) -> None:
     """
-    Execute the shortcut actions.
-    (Placeholder for now)
+    Execute the shortcut actions, including sequences.
     """
     print(f"Executing shortcut: {shortcut.get('name')} with steps:")
+    initial_position = pyautogui.position()  # Save the cursor's origin position
+
     for step in shortcut.get("steps", []):
-        print(f" - {step}")
-    # TODO: Implement actual PyAutoGUI mouse/key logic here
+        action = step.get("action")
+        if action == "delay":
+            duration = step.get("duration", 0)
+            print(f"Delaying for {duration} seconds...")
+            time.sleep(duration)
+        elif action == "move_to_image":
+            image_path = step.get("target")
+            if not os.path.exists(image_path):
+                print(f"Image not found: {image_path}")
+                continue
+            location = pyautogui.locateCenterOnScreen(image_path, confidence=0.8)
+            if location:
+                x, y = location
+                print(f"Moving cursor to image at ({x}, {y})...")
+                pyautogui.moveTo(x, y)
+            else:
+                print(f"Image not found on screen: {image_path}")
+        elif action == "move_to_origin":
+            print(f"Returning cursor to origin at {initial_position}...")
+            pyautogui.moveTo(initial_position)
+        elif action == "check_duplicates":
+            image_path = step.get("target")
+            if not os.path.exists(image_path):
+                print(f"Image not found: {image_path}")
+                continue
+            locations = list(pyautogui.locateAllOnScreen(image_path, confidence=0.8))
+            if len(locations) > 1:
+                print(f"Duplicate icons detected for {image_path}. Stopping execution.")
+                return
+        else:
+            print(f"Unknown action: {action}")
+
+    print("Shortcut execution completed.")
+
+def is_sequence_valid(sequence: List[str], existing_shortcuts: List[str]) -> bool:
+    """
+    Validate that the sequence of shortcuts:
+    - Each step is a valid shortcut
+    - No step conflicts with existing shortcuts
+    """
+    for step in sequence:
+        if not is_shortcut_valid(step, existing_shortcuts):
+            print(f"Sequence step invalid: {step}")  # Debugging line
+            return False
+    return True
+
+def create_sequence_shortcut(name: str, sequence: List[str], existing_shortcuts: List[str]) -> Dict:
+    """
+    Create a multi-step shortcut sequence.
+    """
+    if not is_sequence_valid(sequence, existing_shortcuts):
+        raise ValueError("Invalid sequence")
+    return {
+        "name": name,
+        "steps": sequence
+    }
+
+# Example shortcut definition
+shortcut_example = {
+    "name": "OpenDropdownMenu",
+    "steps": [
+        "ctrl+alt+d",
+        "down",
+        "enter"
+    ]
+}
