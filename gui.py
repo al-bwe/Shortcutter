@@ -157,6 +157,10 @@ class MainWindow(QWidget):
         self.btn_edit.clicked.connect(self.edit_selected_shortcut)
         layout.addWidget(self.btn_edit)
 
+        self.btn_delete = QPushButton("Delete Selected Shortcut")
+        self.btn_delete.clicked.connect(self.delete_selected_shortcut)
+        layout.addWidget(self.btn_delete)
+
         self.setLayout(layout)
         self.refresh_list()
 
@@ -203,7 +207,45 @@ class MainWindow(QWidget):
 
             if dialog.exec():
                 updated_shortcut = dialog.shortcut
-                logic.save_shortcut(updated_shortcut)
+                if not logic.is_shortcut_valid(updated_shortcut["combo"], [s["combo"] for s in self.shortcuts], shortcut):
+                    QMessageBox.warning(self, "Invalid Shortcut", "Shortcut combo invalid, common, or already used.")
+                    return
+
+                # Handle name change: delete old shortcut file if name has changed
+                if updated_shortcut["name"] != shortcut["name"]:
+                    logic.delete_shortcut(shortcut)
+
+                logic.save_shortcut(updated_shortcut)  # Save the updated shortcut
+                self.shortcuts = logic.load_all_shortcuts()  # Reload shortcuts
+                self.refresh_list()
+        else:
+            QMessageBox.warning(self, "Error", "Could not find the selected shortcut.")
+
+    def delete_selected_shortcut(self):
+        selected_items = self.list_widget.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "No Selection", "Please select a shortcut to delete.")
+            return
+
+        selected_item = selected_items[0]
+        # Extract the shortcut name and combo from the displayed text
+        shortcut_text = selected_item.text()
+        name, combo = shortcut_text.split(" (")
+        combo = combo.rstrip(")")
+
+        # Find the shortcut by name and combo
+        shortcut = next((sc for sc in self.shortcuts if sc["name"] == name and sc["combo"] == combo), None)
+
+        if shortcut:
+            reply = QMessageBox.question(
+                self, "Confirm Delete",
+                f"Are you sure you want to delete the shortcut '{shortcut['name']}'?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+
+            if reply == QMessageBox.StandardButton.Yes:
+                logic.delete_shortcut(shortcut)
                 self.shortcuts = logic.load_all_shortcuts()  # Reload shortcuts
                 self.refresh_list()
         else:
