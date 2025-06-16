@@ -1,0 +1,10 @@
+{
+    "name": "OR",
+    "combo": "Alt+Shift+Q",
+    "steps": [
+        {
+            "action": "left_click",
+            "target": "clipboard_snippet_2d3f96a505504d0ab0edc4004ab59a37.png"
+        }
+    ]
+}
