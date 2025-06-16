@@ -5,6 +5,5 @@ __pycache__/functions.cpython-312.pyc
 __pycache__/gui.cpython-312.pyc
 __pycache__/logic.cpython-312.pyc
 \.venv
-\__pycache__\
-\assets\icons\*
-\assets\shortcuts\*
+\__pycache__/*
+assets/*
